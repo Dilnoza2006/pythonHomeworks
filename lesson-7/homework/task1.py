@@ -1,62 +1,75 @@
-from math import sqrt
+import math
 
 class Vector:
     def __init__(self, *components):
-        if len(components) == 0:
+        if not components:
             raise ValueError("A vector must have at least one component.")
-        self.components = components
+        self.components = list(components)
 
     def __repr__(self):
         return f"Vector({', '.join(map(str, self.components))})"
 
-    def __len__(self):
-        return len(self.components)
-
-    def __getitem__(self, index):
-        return self.components[index]
-
-    def __eq__(self, other):
-        return self.components == other.components
-
-    def _validate_dimensions(self, other):
-        if len(self) != len(other):
-            raise ValueError("Vectors must have the same dimensions.")
-
     def __add__(self, other):
-        self._validate_dimensions(other)
-        return Vector(*(a + b for a, b in zip(self.components, other.components)))
+        if len(self.components) != len(other.components):
+            raise ValueError("Vectors must have the same dimensions for addition.")
+        return Vector(*[a + b for a, b in zip(self.components, other.components)])
 
     def __sub__(self, other):
-        self._validate_dimensions(other)
-        return Vector(*(a - b for a, b in zip(self.components, other.components)))
+        if len(self.components) != len(other.components):
+            raise ValueError("Vectors must have the same dimensions for subtraction.")
+        return Vector(*[a - b for a, b in zip(self.components, other.components)])
 
-    def __mul__(self, scalar):
-        if isinstance(scalar, (int, float)):
-            return Vector(*(a * scalar for a in self.components))
-        raise ValueError("Multiplication is only supported with a scalar.")
+    def __mul__(self, other):
+        if isinstance(other, Vector):
+            # Dot product
+            if len(self.components) != len(other.components):
+                raise ValueError("Vectors must have the same dimensions for dot product.")
+            return sum(a * b for a, b in zip(self.components, other.components))
+        elif isinstance(other, (int, float)):
+            # Scalar multiplication
+            return Vector(*[a * other for a in self.components])
+        else:
+            raise TypeError("Unsupported operand type for multiplication.")
 
     def __rmul__(self, scalar):
-        return self * scalar
-
-    def dot(self, other):
-        self._validate_dimensions(other)
-        return sum(a * b for a, b in zip(self.components, other.components))
+        # Handle scalar multiplication when the scalar is on the left
+        return self.__mul__(scalar)
 
     def magnitude(self):
-        return sqrt(sum(a ** 2 for a in self.components))
+        return math.sqrt(sum(a ** 2 for a in self.components))
 
     def normalize(self):
         mag = self.magnitude()
         if mag == 0:
             raise ValueError("Cannot normalize a zero vector.")
-        return Vector(*(a / mag for a in self.components))
+        return Vector(*[a / mag for a in self.components])
 
+# Example Usage
 v1 = Vector(1, 2, 3)
 v2 = Vector(4, 5, 6)
-print(v1 + v2)
-print(v1 - v2)
-print(v1 * 3)
-print(3 * v1)
-print(v1.dot(v2))
-print(v1.magnitude())
-print(v1.normalize())
+
+# Print the vector
+print(v1)          # Output: Vector(1, 2, 3)
+
+# Addition
+v3 = v1 + v2
+print(v3)          # Output: Vector(5, 7, 9)
+
+# Subtraction
+v4 = v2 - v1
+print(v4)          # Output: Vector(3, 3, 3)
+
+# Dot product
+dot_product = v1 * v2
+print(dot_product) # Output: 32
+
+# Scalar multiplication
+v5 = 3 * v1
+print(v5)          # Output: Vector(3, 6, 9)
+
+# Magnitude
+print(v1.magnitude())  # Output: 3.7416573867739413
+
+# Normalization
+v_unit = v1.normalize()
+print(v_unit)      # Output: Vector(0.267, 0.534, 0.801)

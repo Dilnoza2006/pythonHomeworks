@@ -1,7 +1,10 @@
-import csv
+
+from abc import ABC, abstractmethod
 import json
+import csv
 from datetime import datetime
 
+# Task class to represent individual tasks
 class Task:
     def __init__(self, task_id, title, description, due_date=None, status="Pending"):
         self.task_id = task_id
@@ -13,151 +16,184 @@ class Task:
     def __str__(self):
         return f"{self.task_id}, {self.title}, {self.description}, {self.due_date}, {self.status}"
 
-    def to_dict(self):
-        return {
-            "task_id": self.task_id,
-            "title": self.title,
-            "description": self.description,
-            "due_date": self.due_date,
-            "status": self.status
-        }
+# Abstract base class for file handling
+class FileHandler(ABC):
+    @abstractmethod
+    def save_tasks(self, tasks, file_path):
+        pass
 
-    @staticmethod
-    def from_dict(data):
-        return Task(
-            data["task_id"],
-            data["title"],
-            data["description"],
-            data.get("due_date"),
-            data.get("status", "Pending")
-        )
+    @abstractmethod
+    def load_tasks(self, file_path):
+        pass
 
-class StorageInterface:
-    def save(self, tasks, filename):
-        raise NotImplementedError
-
-    def load(self, filename):
-        raise NotImplementedError
-
-class CSVStorage(StorageInterface):
-    def save(self, tasks, filename):
-        with open(filename, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=tasks[0].to_dict().keys())
-            writer.writeheader()
+# CSV file handler implementation
+class CSVFileHandler(FileHandler):
+    def save_tasks(self, tasks, file_path):
+        with open(file_path, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["Task ID", "Title", "Description", "Due Date", "Status"])
             for task in tasks:
-                writer.writerow(task.to_dict())
-        print("Tasks saved to CSV successfully!")
+                writer.writerow([task.task_id, task.title, task.description, task.due_date, task.status])
 
-    def load(self, filename):
+    def load_tasks(self, file_path):
         tasks = []
         try:
-            with open(filename, 'r') as f:
-                reader = csv.DictReader(f)
+            with open(file_path, mode="r") as file:
+                reader = csv.reader(file)
+                next(reader)  # Skip header
                 for row in reader:
-                    tasks.append(Task.from_dict(row))
+                    task = Task(int(row[0]), row[1], row[2], row[3], row[4])
+                    tasks.append(task)
         except FileNotFoundError:
-            print("CSV file not found.")
+            pass
         return tasks
 
-class JSONStorage(StorageInterface):
-    def save(self, tasks, filename):
-        with open(filename, 'w') as f:
-            json.dump([task.to_dict() for task in tasks], f, indent=4)
-        print("Tasks saved to JSON successfully!")
+# JSON file handler implementation
+class JSONFileHandler(FileHandler):
+    def save_tasks(self, tasks, file_path):
+        task_list = []
+        for task in tasks:
+            task_dict = {
+                "task_id": task.task_id,
+                "title": task.title,
+                "description": task.description,
+                "due_date": task.due_date,
+                "status": task.status
+            }
+            task_list.append(task_dict)
+        with open(file_path, mode="w") as file:
+            json.dump(task_list, file, indent=4)
 
-    def load(self, filename):
+    def load_tasks(self, file_path):
         tasks = []
         try:
-            with open(filename, 'r') as f:
-                data = json.load(f)
-                tasks = [Task.from_dict(item) for item in data]
+            with open(file_path, mode="r") as file:
+                task_list = json.load(file)
+                for task_dict in task_list:
+                    task = Task(
+                        task_dict["task_id"],
+                        task_dict["title"],
+                        task_dict["description"],
+                        task_dict["due_date"],
+                        task_dict["status"]
+                    )
+                    tasks.append(task)
         except FileNotFoundError:
-            print("JSON file not found.")
+            pass
         return tasks
 
-class TaskManager:
-    def __init__(self, storage: StorageInterface):
-        self.tasks = []
-        self.storage = storage
+# To-Do Application class
+class ToDoApp:
+    def __init__(self, file_handler, file_path):
+        self.file_handler = file_handler
+        self.file_path = file_path
+        self.tasks = self.file_handler.load_tasks(self.file_path)
 
-    def add_task(self, task: Task):
+    def add_task(self, task):
         self.tasks.append(task)
         print("Task added successfully!")
 
-    def view_tasks(self, status_filter=None):
+    def view_tasks(self):
+        if not self.tasks:
+            print("No tasks found.")
+            return
+        print("Tasks:")
         for task in self.tasks:
-            if status_filter is None or task.status == status_filter:
-                print(task)
+            print(task)
 
     def update_task(self, task_id, title=None, description=None, due_date=None, status=None):
         for task in self.tasks:
             if task.task_id == task_id:
-                task.title = title or task.title
-                task.description = description or task.description
-                task.due_date = due_date or task.due_date
-                task.status = status or task.status
+                if title:
+                    task.title = title
+                if description:
+                    task.description = description
+                if due_date:
+                    task.due_date = due_date
+                if status:
+                    task.status = status
                 print("Task updated successfully!")
                 return
-        print("Task ID not found.")
+        print(f"No task found with ID {task_id}.")
 
     def delete_task(self, task_id):
-        self.tasks = [task for task in self.tasks if task.task_id != task_id]
-        print("Task deleted successfully!")
+        for task in self.tasks:
+            if task.task_id == task_id:
+                self.tasks.remove(task)
+                print("Task deleted successfully!")
+                return
+        print(f"No task found with ID {task_id}.")
 
-    def save_tasks(self, filename):
-        self.storage.save(self.tasks, filename)
+    def filter_tasks(self, status):
+        filtered_tasks = [task for task in self.tasks if task.status == status]
+        if not filtered_tasks:
+            print(f"No tasks found with status {status}.")
+            return
+        print(f"Tasks with status {status}:")
+        for task in filtered_tasks:
+            print(task)
 
-    def load_tasks(self, filename):
-        self.tasks = self.storage.load(filename)
+    def save_tasks(self):
+        self.file_handler.save_tasks(self.tasks, self.file_path)
+        print("Tasks saved successfully!")
 
-    def run(self):
-        while True:
-            print("\n1. Add a new task")
-            print("2. View all tasks")
-            print("3. Update a task")
-            print("4. Delete a task")
-            print("5. Filter tasks by status")
-            print("6. Save tasks")
-            print("7. Load tasks")
-            print("8. Exit")
-            choice = input("Enter your choice: ")
+    def load_tasks(self):
+        self.tasks = self.file_handler.load_tasks(self.file_path)
+        print("Tasks loaded successfully!")
 
-            if choice == "1":
-                task_id = input("Enter Task ID: ")
-                title = input("Enter Title: ")
-                description = input("Enter Description: ")
-                due_date = input("Enter Due Date (YYYY-MM-DD, optional): ") or None
-                status = input("Enter Status (Pending/In Progress/Completed): ") or "Pending"
-                self.add_task(Task(task_id, title, description, due_date, status))
-            elif choice == "2":
-                self.view_tasks()
-            elif choice == "3":
-                task_id = input("Enter Task ID to update: ")
-                title = input("Enter new Title (leave blank to skip): ") or None
-                description = input("Enter new Description (leave blank to skip): ") or None
-                due_date = input("Enter new Due Date (YYYY-MM-DD, leave blank to skip): ") or None
-                status = input("Enter new Status (Pending/In Progress/Completed, leave blank to skip): ") or None
-                self.update_task(task_id, title, description, due_date, status)
-            elif choice == "4":
-                task_id = input("Enter Task ID to delete: ")
-                self.delete_task(task_id)
-            elif choice == "5":
-                status_filter = input("Enter status to filter by (Pending/In Progress/Completed): ")
-                self.view_tasks(status_filter)
-            elif choice == "6":
-                filename = input("Enter filename to save tasks: ")
-                self.save_tasks(filename)
-            elif choice == "7":
-                filename = input("Enter filename to load tasks: ")
-                self.load_tasks(filename)
-            elif choice == "8":
-                print("Goodbye!")
-                break
-            else:
-                print("Invalid choice. Please try again.")
+# Menu function
+def display_menu():
+    print("\nWelcome to the To-Do Application!")
+    print("1. Add a new task")
+    print("2. View all tasks")
+    print("3. Update a task")
+    print("4. Delete a task")
+    print("5. Filter tasks by status")
+    print("6. Save tasks")
+    print("7. Load tasks")
+    print("8. Exit")
 
-if __name__ == '__main__':
-    storage_type = input("Choose storage type (csv/json): ").strip().lower()
-    storage = CSVStorage() if storage_type == "csv" else JSONStorage()
-    manager = TaskManager(storage)
-    manager.run()
+# Main function to run the application
+def main():
+    file_path = "tasks.json"  # Change to "tasks.csv" for CSV format
+    file_handler = JSONFileHandler()  # Change to CSVFileHandler() for CSV format
+    app = ToDoApp(file_handler, file_path)
+
+    while True:
+        display_menu()
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            task_id = int(input("Enter Task ID: "))
+            title = input("Enter Title: ")
+            description = input("Enter Description: ")
+            due_date = input("Enter Due Date (YYYY-MM-DD, optional): ") or None
+            status = input("Enter Status (Pending/In Progress/Completed): ")
+            task = Task(task_id, title, description, due_date, status)
+            app.add_task(task)
+        elif choice == "2":
+            app.view_tasks()
+        elif choice == "3":
+            task_id = int(input("Enter Task ID to update: "))
+            title = input("Enter new Title (leave blank to skip): ") or None
+            description = input("Enter new Description (leave blank to skip): ") or None
+            due_date = input("Enter new Due Date (YYYY-MM-DD, leave blank to skip): ") or None
+            status = input("Enter new Status (leave blank to skip): ") or None
+            app.update_task(task_id, title, description, due_date, status)
+        elif choice == "4":
+            task_id = int(input("Enter Task ID to delete: "))
+            app.delete_task(task_id)
+        elif choice == "5":
+            status = input("Enter status to filter (Pending/In Progress/Completed): ")
+            app.filter_tasks(status)
+        elif choice == "6":
+            app.save_tasks()
+        elif choice == "7":
+            app.load_tasks()
+        elif choice == "8":
+            print("Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
